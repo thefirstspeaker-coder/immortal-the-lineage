@@ -12,23 +12,62 @@ import FamilyTree from './FamilyTree';
 import PetitionCard from './PetitionCard';
 
 function Game() {
-  const [state, setState] = useState<GameState>(() => loadGame() ?? createInitialState());
+  const [state, setState] = useState<GameState>(() => {
+    const loadedState = loadGame();
+    if (loadedState) {
+      console.log('[game] Loaded saved game', {
+        year: loadedState.year,
+        people: loadedState.people.length,
+        petitions: loadedState.petitions.length,
+      });
+      return loadedState;
+    }
+
+    const initialState = createInitialState();
+    console.log('[game] Created initial game state', {
+      year: initialState.year,
+      people: initialState.people.length,
+      petitions: initialState.petitions.length,
+    });
+    return initialState;
+  });
+
+  useEffect(() => {
+    console.log('[game] Component mounted');
+    return () => {
+      console.log('[game] Component unmounted');
+    };
+  }, []);
 
   useEffect(() => {
     saveGame(state);
+    console.log('[game] Saved state', {
+      year: state.year,
+      influence: state.influence,
+      livingPeople: state.people.filter((person) => person.alive).length,
+      petitions: state.petitions.length,
+      gameOver: state.gameOver,
+    });
   }, [state]);
 
   const livingCount = useMemo(() => state.people.filter((person) => person.alive).length, [state.people]);
 
   const handleNextYear = () => {
+    console.log('[game] Next Year clicked', { currentYear: state.year });
     setState((current) => advanceYear(current));
   };
 
   const handleChoice = (petitionId: string, choiceId: string) => {
+    console.log('[game] Petition choice selected', {
+      petitionId,
+      choiceId,
+      currentYear: state.year,
+    });
     setState((current) => applyPetitionChoice(current, petitionId, choiceId));
   };
 
   const handleRestart = () => {
+    console.log('[game] Restart requested');
     setState(resetGame());
   };
 
