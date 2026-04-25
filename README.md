@@ -25,20 +25,12 @@ Yes—GitHub Pages can cause this exact issue if you publish the repository root
 - Build first with `npm run build`.
 - Publish the generated `dist/` folder.
 
-This repository includes `.github/workflows/deploy-pages.yml` which builds and deploys the app correctly for this URL:
-
-- `https://thefirstspeaker-coder.github.io/immortal-the-lineage/`
-
-The workflow uses:
-
-```bash
-npm run build -- --base=/immortal-the-lineage/
-```
+This project now auto-detects GitHub Actions builds and sets Vite's `base` path to `/<repo-name>/` so assets resolve correctly on project pages (for example, `https://<user>.github.io/<repo>/`).
 
 If you deploy outside GitHub Actions, you can set an explicit base path:
 
 ```bash
-npm run build -- --base=/your-base-path/
+VITE_BASE_PATH=/your-base-path/ npm run build
 ```
 
 ## Project structure
@@ -75,4 +67,5 @@ npm run build -- --base=/your-base-path/
 - You spend influence to support or decline petitions.
 - State is persisted to `localStorage`.
 - Game ends when no living characters remain.
+
 
