@@ -410,7 +410,12 @@ export const applyPetitionChoice = (
 export const advanceYear = (state: GameState): GameState => {
   if (state.gameOver) return state;
 
-  let nextState = { ...state, year: state.year + 1, influence: Math.min(10, state.influence + 1), petitions: [] };
+  let nextState: GameState = {
+    ...state,
+    year: state.year + 1,
+    influence: Math.min(10, state.influence + 1),
+    petitions: [],
+  };
   nextState = agePeople(nextState);
   nextState = resolveBirths(nextState);
   nextState = resolveDeaths(nextState);
