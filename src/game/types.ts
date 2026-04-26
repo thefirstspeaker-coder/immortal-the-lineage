@@ -1,4 +1,5 @@
 export type Trait = 'Brave' | 'Kind' | 'Ambitious' | 'Jealous' | 'Frail';
+export type Gender = 'male' | 'female';
 
 export interface Character {
   id: string;
@@ -7,9 +8,14 @@ export interface Character {
   health: number;
   happiness: number;
   trait: Trait;
+  gender: Gender;
+  surname: string;
+  spouseId: string | null;
   parents: string[];
   children: string[];
   alive: boolean;
+  generation: number;
+  fertility: number;
   familiarity: 0 | 1 | 2 | 3;
   lastSeenYear?: number;
   history?: string[];
@@ -35,6 +41,8 @@ export interface GameState {
   year: number;
   people: Character[];
   influence: number;
+  wealth: number;
+  reputation: number;
   descendantsCreated: number;
   petitions: Petition[];
   history: string[];
