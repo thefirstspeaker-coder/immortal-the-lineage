@@ -138,7 +138,9 @@ const ageAndHealthTick = (state: GameState, debugLogs: string[]): GameState => (
 
 const resolveDeaths = (state: GameState, debugLogs: string[]): GameState => {
   const messages: string[] = [];
-  const people = state.people.map((person) => {
+  const deceasedIds = new Set<string>();
+
+  let people = state.people.map((person) => {
     if (!person.alive) return person;
     const ageRisk = person.age > 80 ? 0.2 : person.age > 65 ? 0.08 : person.age > 50 ? 0.03 : 0.006;
     const healthRisk = (100 - person.health) / 1100;
@@ -150,10 +152,23 @@ const resolveDeaths = (state: GameState, debugLogs: string[]): GameState => {
       `[death-check] ${person.name}: roll=${roll.toFixed(3)} vs risk=${totalRisk.toFixed(3)} (age=${ageRisk.toFixed(3)}, health=${healthRisk.toFixed(3)}, trait=${traitRisk.toFixed(3)})`,
     );
     if (roll > totalRisk) return person;
+    deceasedIds.add(person.id);
     messages.push(`${person.name} died.`);
     pushDebug(debugLogs, `[death] ${person.name} died because roll was within risk threshold.`);
-    return pushCharacterHistory({ ...person, alive: false, health: 0, spouseId: person.spouseId }, `Year ${Math.floor(state.year)}: They passed away.`);
+    return pushCharacterHistory({ ...person, alive: false, health: 0 }, `Year ${Math.floor(state.year)}: They passed away.`);
   });
+
+  if (deceasedIds.size > 0) {
+    people = people.map((person) => {
+      if (!person.alive || !person.spouseId || !deceasedIds.has(person.spouseId)) return person;
+      messages.push(`${person.name} was widowed.`);
+      pushDebug(debugLogs, `[death] ${person.name} became widowed after spouse death.`);
+      return pushCharacterHistory(
+        { ...person, spouseId: null },
+        `Year ${Math.floor(state.year)}: They were widowed.`,
+      );
+    });
+  }
 
   return { ...state, people, history: [...messages, ...state.history].slice(0, 10) };
 };
@@ -451,6 +466,9 @@ export const loadGame = (): GameState | null => {
       ...parsed,
       wealth: parsed.wealth ?? 50,
       reputation: parsed.reputation ?? 50,
+      // Petition choice effects are functions and cannot survive JSON serialization.
+      // Clear persisted petitions on load to avoid calling undefined `choice.effect`.
+      petitions: [],
       people: parsed.people.map((p) => ({
         ...p,
         spouseId: p.spouseId ?? null,
