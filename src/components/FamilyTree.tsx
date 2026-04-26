@@ -1,10 +1,19 @@
+import { useMemo, useState } from 'react';
 import { Character } from '../game/types';
+import PersonProfile from './PersonProfile';
 
 interface FamilyTreeProps {
   people: Character[];
+  currentYear: number;
 }
 
-function FamilyTree({ people }: FamilyTreeProps) {
+function FamilyTree({ people, currentYear }: FamilyTreeProps) {
+  const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+  const selectedPerson = useMemo(
+    () => people.find((person) => person.id === selectedPersonId) ?? null,
+    [people, selectedPersonId],
+  );
+
   return (
     <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4">
       <h2 className="text-lg font-semibold text-slate-100">Family Tree</h2>
@@ -45,6 +54,8 @@ function FamilyTree({ people }: FamilyTreeProps) {
                   rx="10"
                   fill={person.alive ? '#1e293b' : '#3f3f46'}
                   stroke={person.alive ? '#7dd3fc' : '#a1a1aa'}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedPersonId(person.id)}
                 />
                 <text x={x} y={y - 4} textAnchor="middle" fill="#f8fafc" fontSize="11">
                   {person.name}
@@ -57,6 +68,15 @@ function FamilyTree({ people }: FamilyTreeProps) {
           })}
         </svg>
       </div>
+
+      {selectedPerson ? (
+        <PersonProfile
+          character={selectedPerson}
+          people={people}
+          currentYear={currentYear}
+          onClose={() => setSelectedPersonId(null)}
+        />
+      ) : null}
     </section>
   );
 }

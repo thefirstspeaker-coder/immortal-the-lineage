@@ -10,12 +10,16 @@ export interface Character {
   parents: string[];
   children: string[];
   alive: boolean;
+  familiarity: 0 | 1 | 2 | 3;
+  lastSeenYear?: number;
+  history?: string[];
 }
 
 export interface PetitionChoice {
   id: string;
   label: string;
   influenceCost: number;
+  supportsCharacter?: boolean;
   effect: (state: GameState, characterId: string) => GameState;
 }
 
