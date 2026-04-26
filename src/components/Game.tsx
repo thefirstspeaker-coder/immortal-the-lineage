@@ -133,7 +133,7 @@ function Game() {
         )}
       </section>
 
-      <FamilyTree people={state.people} />
+      <FamilyTree people={state.people} currentYear={state.year} />
 
       <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4">
         <h2 className="text-lg font-semibold text-slate-100">Recent Chronicle</h2>

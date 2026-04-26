@@ -24,6 +24,32 @@ const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max,
 const randomId = () => crypto.randomUUID();
 const randomOf = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
 
+const pushCharacterHistory = (person: Character, entry: string): Character => ({
+  ...person,
+  history: [entry, ...(person.history ?? [])].slice(0, 8),
+});
+
+const withCharacterEvent = (
+  state: GameState,
+  characterId: string,
+  entry: string,
+  updater?: (character: Character) => Character,
+): GameState => ({
+  ...state,
+  people: state.people.map((person) => {
+    if (person.id !== characterId) return person;
+    const updatedPerson = updater ? updater(person) : person;
+    return pushCharacterHistory(updatedPerson, entry);
+  }),
+});
+
+const getChildFamiliarity = (parentA: Character, parentB: Character): 0 | 1 => {
+  const familiarities = [parentA.familiarity ?? 1, parentB.familiarity ?? 1];
+  if (familiarities.some((value) => value >= 1)) return 1;
+  const hasFavouredParent = familiarities.some((value) => value >= 3);
+  return hasFavouredParent && Math.random() < 0.35 ? 1 : 0;
+};
+
 const updateCharacter = (
   state: GameState,
   characterId: string,
@@ -268,6 +294,9 @@ const makeFounder = (): Character => ({
   parents: [],
   children: [],
   alive: true,
+  familiarity: 1,
+  lastSeenYear: 1200,
+  history: ['You welcomed them into your first household.'],
 });
 
 export const createInitialState = (): GameState => {
@@ -324,7 +353,14 @@ export const resolveDeaths = (state: GameState): GameState => {
           : 'a frail constitution';
 
     deathMessages.push(`${person.name} passed away from ${likelyCause}.`);
-    return { ...person, alive: false, health: 0 };
+    return pushCharacterHistory(
+      {
+        ...person,
+        alive: false,
+        health: 0,
+      },
+      `Year ${state.year}: They passed away from ${likelyCause}.`,
+    );
   });
 
   return {
@@ -356,6 +392,9 @@ export const resolveBirths = (state: GameState): GameState => {
       parents: [parentA.id, parentB.id],
       children: [],
       alive: true,
+      familiarity: getChildFamiliarity(parentA, parentB),
+      lastSeenYear: state.year,
+      history: [`Year ${state.year}: They were born into the family.`],
     };
 
     nextState = {
@@ -370,6 +409,8 @@ export const resolveBirths = (state: GameState): GameState => {
     };
 
     nextState = { ...nextState, people: [...nextState.people, child] };
+    nextState = withCharacterEvent(nextState, parentA.id, `Year ${state.year}: ${child.name} was born.`);
+    nextState = withCharacterEvent(nextState, parentB.id, `Year ${state.year}: ${child.name} was born.`);
     nextState.history = [`${child.name} was born this year.`, ...nextState.history].slice(0, 8);
   }
 
@@ -420,11 +461,38 @@ export const applyPetitionChoice = (
   };
 
   nextState = choice.effect(nextState, petition.characterId);
+
+  const supportsCharacter = choice.supportsCharacter ?? choice.influenceCost > 0;
+  if (supportsCharacter) {
+    nextState = withCharacterEvent(
+      nextState,
+      petition.characterId,
+      `Year ${state.year}: Their petition was supported.`,
+      (person) => ({
+        ...person,
+        familiarity: 3,
+        lastSeenYear: state.year,
+      }),
+    );
+    nextState = {
+      ...nextState,
+      history: [`You supported ${petition.title.toLowerCase()}.`, ...nextState.history].slice(0, 8),
+    };
+  } else {
+    nextState = withCharacterEvent(nextState, petition.characterId, `Year ${state.year}: Their petition was refused.`);
+    nextState = {
+      ...nextState,
+      history: [`You refused ${petition.title.toLowerCase()}.`, ...nextState.history].slice(0, 8),
+    };
+  }
+
   return nextState;
 };
 
 export const advanceYear = (state: GameState): GameState => {
   if (state.gameOver) return state;
+
+  const ignoredPetitions = state.petitions;
 
   let nextState: GameState = {
     ...state,
@@ -433,12 +501,45 @@ export const advanceYear = (state: GameState): GameState => {
     petitions: [],
   };
   nextState = agePeople(nextState);
+
+  if (ignoredPetitions.length > 0) {
+    const ignoredIds = new Set(ignoredPetitions.map((petition) => petition.characterId));
+    nextState = {
+      ...nextState,
+      people: nextState.people.map((person) =>
+        ignoredIds.has(person.id)
+          ? pushCharacterHistory(person, `Year ${nextState.year}: Their plea went unanswered.`)
+          : person,
+      ),
+    };
+    nextState.history = ['Some petitions were left unanswered as the year turned.', ...nextState.history].slice(0, 8);
+  }
+
   nextState = resolveBirths(nextState);
   nextState = resolveDeaths(nextState);
 
   const livingPeople = getLiving(nextState.people);
   nextState.gameOver = livingPeople.length === 0;
   nextState.petitions = nextState.gameOver ? [] : generatePetitions(nextState);
+
+  if (nextState.petitions.length > 0) {
+    const petitionerIds = new Set(nextState.petitions.map((petition) => petition.characterId));
+    nextState = {
+      ...nextState,
+      people: nextState.people.map((person) => {
+        if (!petitionerIds.has(person.id)) return person;
+
+        return pushCharacterHistory(
+          {
+            ...person,
+            familiarity: Math.max(person.familiarity ?? 1, 2) as 0 | 1 | 2 | 3,
+            lastSeenYear: nextState.year,
+          },
+          `Year ${nextState.year}: They sent a petition to the immortal patron.`,
+        );
+      }),
+    };
+  }
 
   return nextState;
 };
@@ -452,7 +553,14 @@ export const loadGame = (): GameState | null => {
   if (!raw) return null;
 
   try {
-    return JSON.parse(raw) as GameState;
+    const parsed = JSON.parse(raw) as GameState;
+    return {
+      ...parsed,
+      people: parsed.people.map((person) => ({
+        ...person,
+        familiarity: person.familiarity ?? 1,
+      })),
+    };
   } catch {
     return null;
   }
