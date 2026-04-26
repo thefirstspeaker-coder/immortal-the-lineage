@@ -301,22 +301,38 @@ export const agePeople = (state: GameState): GameState => ({
   ),
 });
 
-export const resolveDeaths = (state: GameState): GameState => ({
-  ...state,
-  people: state.people.map((person) => {
+export const resolveDeaths = (state: GameState): GameState => {
+  const deathMessages: string[] = [];
+
+  const people = state.people.map((person) => {
     if (!person.alive) return person;
+
     const ageRisk = person.age > 75 ? 0.35 : person.age > 60 ? 0.2 : person.age > 45 ? 0.1 : 0.03;
     const healthRisk = (100 - person.health) / 300;
     const traitRisk = person.trait === 'Frail' ? 0.08 : 0;
     const totalRisk = ageRisk + healthRisk + traitRisk;
 
-    if (Math.random() < totalRisk) {
-      return { ...person, alive: false, health: 0 };
+    if (Math.random() >= totalRisk) {
+      return person;
     }
 
-    return person;
-  }),
-});
+    const likelyCause =
+      ageRisk >= healthRisk && ageRisk >= traitRisk
+        ? 'old age'
+        : healthRisk >= traitRisk
+          ? 'an illness'
+          : 'a frail constitution';
+
+    deathMessages.push(`${person.name} passed away from ${likelyCause}.`);
+    return { ...person, alive: false, health: 0 };
+  });
+
+  return {
+    ...state,
+    people,
+    history: [...deathMessages, ...state.history].slice(0, 8),
+  };
+};
 
 export const resolveBirths = (state: GameState): GameState => {
   const adults = state.people.filter((person) => person.alive && person.age >= 18 && person.age <= 40);
