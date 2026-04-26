@@ -466,6 +466,9 @@ export const loadGame = (): GameState | null => {
       ...parsed,
       wealth: parsed.wealth ?? 50,
       reputation: parsed.reputation ?? 50,
+      // Petition choice effects are functions and cannot survive JSON serialization.
+      // Clear persisted petitions on load to avoid calling undefined `choice.effect`.
+      petitions: [],
       people: parsed.people.map((p) => ({
         ...p,
         spouseId: p.spouseId ?? null,
