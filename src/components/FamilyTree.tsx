@@ -9,64 +9,53 @@ interface FamilyTreeProps {
 
 function FamilyTree({ people, currentYear }: FamilyTreeProps) {
   const [selectedPersonId, setSelectedPersonId] = useState<string | null>(null);
+
   const selectedPerson = useMemo(
     () => people.find((person) => person.id === selectedPersonId) ?? null,
     [people, selectedPersonId],
   );
 
+  const generations = useMemo(() => {
+    const map = new Map<number, Character[]>();
+    for (const person of people) {
+      const list = map.get(person.generation) ?? [];
+      list.push(person);
+      map.set(person.generation, list);
+    }
+    return [...map.entries()].sort((a, b) => a[0] - b[0]);
+  }, [people]);
+
   return (
     <section className="rounded-2xl border border-slate-700 bg-slate-900/80 p-4">
       <h2 className="text-lg font-semibold text-slate-100">Family Tree</h2>
-      <p className="mb-4 text-sm text-slate-300">Parents and children are connected with simple lines.</p>
+      <p className="mb-4 text-sm text-slate-300">Generations, spouses, and descendants update live.</p>
 
-      <div className="overflow-x-auto">
-        <svg width={Math.max(600, people.length * 110)} height={300} className="rounded-xl bg-slate-950/60">
-          {people.map((person, index) => {
-            const x = 70 + index * 100;
-            const y = person.parents.length === 0 ? 70 : 190;
-
-            return (
-              <g key={person.id}>
-                {person.parents.map((parentId) => {
-                  const parentIndex = people.findIndex((candidate) => candidate.id === parentId);
-                  if (parentIndex < 0) return null;
-                  const parentX = 70 + parentIndex * 100;
-                  const parentY = 70;
-
-                  return (
-                    <line
-                      key={`${parentId}-${person.id}`}
-                      x1={parentX}
-                      y1={parentY + 18}
-                      x2={x}
-                      y2={y - 18}
-                      stroke="#64748b"
-                      strokeWidth="2"
-                    />
-                  );
-                })}
-
-                <rect
-                  x={x - 38}
-                  y={y - 22}
-                  width="76"
-                  height="44"
-                  rx="10"
-                  fill={person.alive ? '#1e293b' : '#3f3f46'}
-                  stroke={person.alive ? '#7dd3fc' : '#a1a1aa'}
-                  className="cursor-pointer"
-                  onClick={() => setSelectedPersonId(person.id)}
-                />
-                <text x={x} y={y - 4} textAnchor="middle" fill="#f8fafc" fontSize="11">
-                  {person.name}
-                </text>
-                <text x={x} y={y + 11} textAnchor="middle" fill="#cbd5e1" fontSize="10">
-                  {person.alive ? `Age ${person.age}` : 'Deceased'}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
+      <div className="space-y-4">
+        {generations.map(([generation, members]) => (
+          <div key={generation} className="rounded-xl bg-slate-950/50 p-3">
+            <p className="mb-2 text-xs uppercase tracking-wide text-sky-300">Generation {generation}</p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {members.map((person) => {
+                const spouse = person.spouseId ? people.find((p) => p.id === person.spouseId) : null;
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onClick={() => setSelectedPersonId(person.id)}
+                    className={`rounded-lg border p-3 text-left ${person.alive ? 'border-sky-700 bg-slate-800' : 'border-slate-600 bg-slate-800/40'}`}
+                  >
+                    <p className="font-semibold text-slate-100">{person.name}</p>
+                    <p className="text-xs text-slate-300">
+                      {person.alive ? `Age ${Math.floor(person.age)} • ${person.health.toFixed(0)} health` : 'Deceased'}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">Spouse: {spouse ? spouse.name : 'None'}</p>
+                    <p className="text-xs text-slate-400">Children: {person.children.length}</p>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {selectedPerson ? (
