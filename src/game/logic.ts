@@ -24,6 +24,7 @@ const traits: Trait[] = ['Brave', 'Kind', 'Ambitious', 'Jealous', 'Frail'];
 const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, value));
 const randomId = () => crypto.randomUUID();
 const randomOf = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+const pushDebug = (logs: string[], line: string) => logs.push(line);
 
 const pushCharacterHistory = (person: Character, entry: string): Character => ({
   ...person,
@@ -111,7 +112,7 @@ export const createInitialState = (): GameState => {
   };
 };
 
-const ageAndHealthTick = (state: GameState): GameState => ({
+const ageAndHealthTick = (state: GameState, debugLogs: string[]): GameState => ({
   ...state,
   people: state.people.map((person) => {
     if (!person.alive) return person;
@@ -119,25 +120,38 @@ const ageAndHealthTick = (state: GameState): GameState => ({
     const stage = lifeStage({ ...person, age });
     const baselineDecline = stage === 'elder' ? 1.4 : stage === 'adult' ? 0.8 : 0.35;
     const traitDecline = person.trait === 'Frail' ? 0.6 : 0;
+    const totalHealthDecline = baselineDecline + traitDecline;
+    const fertilityDecline = stage === 'adult' ? 0.35 : 0.08;
+    pushDebug(
+      debugLogs,
+      `[aging] ${person.name}: stage=${stage}, age +${TICK_YEARS}, health -${totalHealthDecline.toFixed(2)} (base=${baselineDecline.toFixed(2)}, trait=${traitDecline.toFixed(2)}), fertility -${fertilityDecline.toFixed(2)}, happiness -0.20`,
+    );
     return {
       ...person,
       age,
-      health: clamp(person.health - baselineDecline - traitDecline),
+      health: clamp(person.health - totalHealthDecline),
       happiness: clamp(person.happiness - 0.2),
-      fertility: clamp(person.fertility - (stage === 'adult' ? 0.35 : 0.08)),
+      fertility: clamp(person.fertility - fertilityDecline),
     };
   }),
 });
 
-const resolveDeaths = (state: GameState): GameState => {
+const resolveDeaths = (state: GameState, debugLogs: string[]): GameState => {
   const messages: string[] = [];
   const people = state.people.map((person) => {
     if (!person.alive) return person;
     const ageRisk = person.age > 80 ? 0.2 : person.age > 65 ? 0.08 : person.age > 50 ? 0.03 : 0.006;
     const healthRisk = (100 - person.health) / 1100;
     const traitRisk = person.trait === 'Frail' ? 0.01 : 0;
-    if (Math.random() > ageRisk + healthRisk + traitRisk) return person;
+    const totalRisk = ageRisk + healthRisk + traitRisk;
+    const roll = Math.random();
+    pushDebug(
+      debugLogs,
+      `[death-check] ${person.name}: roll=${roll.toFixed(3)} vs risk=${totalRisk.toFixed(3)} (age=${ageRisk.toFixed(3)}, health=${healthRisk.toFixed(3)}, trait=${traitRisk.toFixed(3)})`,
+    );
+    if (roll > totalRisk) return person;
     messages.push(`${person.name} died.`);
+    pushDebug(debugLogs, `[death] ${person.name} died because roll was within risk threshold.`);
     return pushCharacterHistory({ ...person, alive: false, health: 0, spouseId: person.spouseId }, `Year ${Math.floor(state.year)}: They passed away.`);
   });
 
@@ -145,7 +159,7 @@ const resolveDeaths = (state: GameState): GameState => {
 };
 
 // Marriage simulation: eligible adults can marry automatically or via petition.
-const resolveMarriages = (state: GameState): GameState => {
+const resolveMarriages = (state: GameState, debugLogs: string[]): GameState => {
   let next = state;
   for (const person of state.people) {
     if (!person.alive || person.spouseId || person.age < 18 || person.age > 50) continue;
@@ -154,15 +168,23 @@ const resolveMarriages = (state: GameState): GameState => {
     const ageFit = 1 - Math.abs(person.age - 28) / 22;
     const healthFit = person.health / 100;
     const chance = clamp((ageFit * 0.5 + healthFit * 0.4 + (familyLoad === 0 ? 0.2 : 0.05)) * 100, 0, 95) / 100;
-    if (Math.random() > chance * 0.09) continue;
+    const finalChance = chance * 0.09;
+    const roll = Math.random();
+    pushDebug(
+      debugLogs,
+      `[marriage-check] ${person.name}: roll=${roll.toFixed(3)} vs chance=${finalChance.toFixed(3)} (ageFit=${ageFit.toFixed(2)}, healthFit=${healthFit.toFixed(2)}, familyLoad=${familyLoad})`,
+    );
+    if (roll > finalChance) continue;
 
     const needsApproval = Math.random() < 0.45;
     if (needsApproval) {
       const petition = createMarriagePetition(person.id, state);
+      pushDebug(debugLogs, `[marriage] ${person.name} triggered a marriage petition (needs approval).`);
       next = { ...next, petitions: [...next.petitions, petition] };
       continue;
     }
 
+    pushDebug(debugLogs, `[marriage] ${person.name} married automatically.`);
     next = createMarriage(next, person.id);
   }
   return next;
@@ -201,7 +223,7 @@ const createMarriage = (state: GameState, personId: string): GameState => {
 };
 
 // Birth simulation: married couples can have children; chance declines as family grows.
-const resolveBirths = (state: GameState): GameState => {
+const resolveBirths = (state: GameState, debugLogs: string[]): GameState => {
   let next = state;
   const seenCouples = new Set<string>();
 
@@ -223,7 +245,12 @@ const resolveBirths = (state: GameState): GameState => {
     const familySizePenalty = Math.pow(0.72, sharedChildren.length);
     const birthChance = 0.14 * ageFactor * healthFactor * fertilityFactor * familySizePenalty;
 
-    if (Math.random() > birthChance) continue;
+    const roll = Math.random();
+    pushDebug(
+      debugLogs,
+      `[birth-check] ${parentA.name} + ${parentB.name}: roll=${roll.toFixed(3)} vs chance=${birthChance.toFixed(3)} (ageFactor=${ageFactor.toFixed(2)}, healthFactor=${healthFactor.toFixed(2)}, fertilityFactor=${fertilityFactor.toFixed(2)}, children=${sharedChildren.length}, penalty=${familySizePenalty.toFixed(2)})`,
+    );
+    if (roll > birthChance) continue;
 
     const avoid = new Set<string>([
       ...sharedChildren.map((id) => (findById(next, id)?.name.split(' ')[0] ?? '')),
@@ -255,6 +282,7 @@ const resolveBirths = (state: GameState): GameState => {
     };
 
     next.people.push(child);
+    pushDebug(debugLogs, `[birth] ${child.name} born to ${parentA.name} and ${parentB.name}.`);
   }
 
   return next;
@@ -287,10 +315,12 @@ const createMarriagePetition = (characterId: string, state: GameState): Petition
   ]);
 };
 
-const generatePetitions = (state: GameState): Petition[] => {
+const generatePetitions = (state: GameState, debugLogs: string[]): Petition[] => {
   if (state.petitions.length > 0) return state.petitions;
   const adults = getLiving(state.people).filter((p) => p.age >= 16);
-  if (adults.length === 0 || Math.random() > 0.08) return [];
+  const roll = Math.random();
+  pushDebug(debugLogs, `[petition-check] adults=${adults.length}, roll=${roll.toFixed(3)} vs threshold=0.080`);
+  if (adults.length === 0 || roll > 0.08) return [];
 
   const c = randomOf(adults);
   const baseChoices = {
@@ -305,6 +335,7 @@ const generatePetitions = (state: GameState): Petition[] => {
   };
 
   const type = randomOf(['sickness', 'family', 'money', 'child']);
+  pushDebug(debugLogs, `[petition] ${c.name} generated petition type="${type}".`);
   if (type === 'sickness') {
     return [makeSimplePetition(c.id, 'Sickness in the Household', 'A healer is needed immediately.', [
       {
@@ -348,6 +379,13 @@ export const applyPetitionChoice = (state: GameState, petitionId: string, choice
     petitions: state.petitions.filter((p) => p.id !== petitionId),
   };
   next = choice.effect(next, petition.characterId);
+  console.log('[sim][petition-decision]', {
+    year: Math.floor(state.year),
+    petition: petition.title,
+    choice: choice.label,
+    influenceCost: choice.influenceCost,
+    remainingInfluence: next.influence,
+  });
 
   return {
     ...next,
@@ -356,8 +394,9 @@ export const applyPetitionChoice = (state: GameState, petitionId: string, choice
 };
 
 // Main real-time simulation tick.
-export const advanceSimulationTick = (state: GameState): GameState => {
+export const advanceSimulationTick = (state: GameState, debugMode = false): GameState => {
   if (state.gameOver || state.petitions.length > 0) return state;
+  const debugLogs: string[] = [];
 
   let next: GameState = {
     ...state,
@@ -365,18 +404,37 @@ export const advanceSimulationTick = (state: GameState): GameState => {
     influence: Math.min(10, state.influence + 0.2),
     wealth: clamp(state.wealth + 0.35),
   };
+  pushDebug(debugLogs, `[tick] year ${state.year.toFixed(2)} -> ${next.year.toFixed(2)} | influence ${state.influence.toFixed(2)} -> ${next.influence.toFixed(2)} | wealth ${state.wealth.toFixed(2)} -> ${next.wealth.toFixed(2)}`);
 
-  next = ageAndHealthTick(next);
-  next = resolveMarriages(next);
-  next = resolveBirths(next);
-  next = resolveDeaths(next);
+  next = ageAndHealthTick(next, debugLogs);
+  next = resolveMarriages(next, debugLogs);
+  next = resolveBirths(next, debugLogs);
+  next = resolveDeaths(next, debugLogs);
 
-  next.petitions = generatePetitions(next);
+  next.petitions = generatePetitions(next, debugLogs);
   if (next.petitions.length > 0) {
     next.history = ['A petition arrived. Time pauses until you decide.', ...next.history].slice(0, 10);
+    pushDebug(debugLogs, `[tick-end] simulation paused due to ${next.petitions.length} petition(s).`);
   }
 
   next.gameOver = getLiving(next.people).length === 0;
+  pushDebug(debugLogs, `[tick-end] living=${getLiving(next.people).length}, gameOver=${next.gameOver}`);
+
+  if (debugMode) {
+    console.groupCollapsed(`[sim] Tick @ year ${next.year.toFixed(2)}`);
+    debugLogs.forEach((line) => console.log(line));
+    console.log('[sim] snapshot', {
+      living: getLiving(next.people).length,
+      people: next.people.length,
+      descendants: next.descendantsCreated,
+      petitions: next.petitions.length,
+      influence: Number(next.influence.toFixed(2)),
+      wealth: Number(next.wealth.toFixed(2)),
+      reputation: Number(next.reputation.toFixed(2)),
+    });
+    console.groupEnd();
+  }
+
   return next;
 };
 

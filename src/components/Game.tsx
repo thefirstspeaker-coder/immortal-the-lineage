@@ -12,14 +12,20 @@ import FamilyTree from './FamilyTree';
 import PetitionCard from './PetitionCard';
 
 const TICK_MS = 1200;
+const DEBUG_STORAGE_KEY = 'immortal-lineage-debug-v1';
 
 function Game() {
   const [state, setState] = useState<GameState>(() => loadGame() ?? createInitialState());
   const [userPaused, setUserPaused] = useState(false);
+  const [debugMode, setDebugMode] = useState<boolean>(() => localStorage.getItem(DEBUG_STORAGE_KEY) === '1');
 
   useEffect(() => {
     saveGame(state);
   }, [state]);
+
+  useEffect(() => {
+    localStorage.setItem(DEBUG_STORAGE_KEY, debugMode ? '1' : '0');
+  }, [debugMode]);
 
   const livingCount = useMemo(() => state.people.filter((person) => person.alive).length, [state.people]);
   const hasPendingPetitions = state.petitions.length > 0;
@@ -28,10 +34,10 @@ function Game() {
   useEffect(() => {
     if (!isRunning) return;
     const timer = window.setInterval(() => {
-      setState((current) => advanceSimulationTick(current));
+      setState((current) => advanceSimulationTick(current, debugMode));
     }, TICK_MS);
     return () => window.clearInterval(timer);
-  }, [isRunning]);
+  }, [debugMode, isRunning]);
 
   const handleChoice = (petitionId: string, choiceId: string) => {
     setState((current) => applyPetitionChoice(current, petitionId, choiceId));
@@ -74,9 +80,10 @@ function Game() {
           <div className="rounded-lg bg-slate-800 p-2">Living: {livingCount}</div>
           <div className="rounded-lg bg-slate-800 p-2">Descendants: {state.descendantsCreated}</div>
           <div className="rounded-lg bg-slate-800 p-2">Status: {hasPendingPetitions ? 'Paused for petition' : isRunning ? 'Running' : 'Paused'}</div>
+          <div className="rounded-lg bg-slate-800 p-2">Debug: {debugMode ? 'On' : 'Off'}</div>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <button
             type="button"
             onClick={() => setUserPaused(false)}
@@ -91,6 +98,13 @@ function Game() {
             className="min-h-12 rounded-xl bg-amber-400 px-4 py-3 text-base font-bold text-slate-950"
           >
             Pause
+          </button>
+          <button
+            type="button"
+            onClick={() => setDebugMode((current) => !current)}
+            className="min-h-12 rounded-xl bg-indigo-400 px-4 py-3 text-base font-bold text-slate-950"
+          >
+            {debugMode ? 'Disable Debug' : 'Enable Debug'}
           </button>
         </div>
       </header>
