@@ -30,14 +30,16 @@ export const getRelationshipSummary = (character: Character, people: Character[]
   const parentNames = character.parents
     .map((parentId) => people.find((person) => person.id === parentId)?.name)
     .filter(Boolean);
+  const spouseName = character.spouseId ? people.find((person) => person.id === character.spouseId)?.name : null;
   const childNames = character.children
     .map((childId) => people.find((person) => person.id === childId)?.name)
     .filter(Boolean);
 
   const parentText = parentNames.length > 0 ? `Parents: ${parentNames.join(', ')}` : 'Parents: Unknown';
   const childText = childNames.length > 0 ? `Children: ${childNames.join(', ')}` : 'Children: None known';
+  const spouseText = spouseName ? `Spouse: ${spouseName}` : 'Spouse: None known';
 
-  return `${parentText}. ${childText}.`;
+  return `${parentText}. ${spouseText}. ${childText}.`;
 };
 
 const getBasicRelationship = (character: Character): string => {
@@ -94,7 +96,7 @@ function PersonProfile({ character, people, currentYear, onClose }: PersonProfil
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div className="rounded-lg bg-slate-800 p-2">Age: {showCore ? character.age : getApproxAge(character.age)}</div>
+          <div className="rounded-lg bg-slate-800 p-2">Age: {showCore ? Math.floor(character.age) : getApproxAge(character.age)}</div>
           <div className="rounded-lg bg-slate-800 p-2">Status: {character.alive ? 'Alive' : 'Deceased'}</div>
           <div className="rounded-lg bg-slate-800 p-2">Trait: {showCore ? character.trait : 'Hidden from your view'}</div>
           <div className="rounded-lg bg-slate-800 p-2">
